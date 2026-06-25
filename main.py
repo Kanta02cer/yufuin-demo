@@ -3,7 +3,7 @@ import sys
 from datetime import date
 
 from scrapers.jalan_scraper import scrape_jalan_hotel
-from scrapers.ikyu_scraper import scrape_ikyu_kamenoi
+from scrapers.ikyu_scraper import scrape_ikyu_kamenoi, load_kamenoi_manual
 from core.compare import save_prices, find_previous_csv, load_prices, detect_changes
 from core.report import generate_report
 from core.notify import send_slack_alert
@@ -30,6 +30,15 @@ async def main():
     print("亀の井別荘 取得中...")
     try:
         today_prices["kamenoi_bessho"] = await scrape_ikyu_kamenoi()
+        # 手動CSV で補完（スクレイピングで取れなかった日付を埋める）
+        manual = load_kamenoi_manual()
+        if manual:
+            added = sum(1 for k, v in manual.items() if k not in today_prices["kamenoi_bessho"])
+            today_prices["kamenoi_bessho"].update(
+                {k: v for k, v in manual.items() if k not in today_prices["kamenoi_bessho"]}
+            )
+            if added:
+                print(f"  → 手動CSV補完: {added} 件追加")
         print(f"  → {len(today_prices['kamenoi_bessho'])} 日分取得")
     except Exception as e:
         print(f"  → ERROR: {e}", file=sys.stderr)

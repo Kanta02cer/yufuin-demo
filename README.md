@@ -34,8 +34,9 @@ GitHub Pages URL（設定後）:
 ```
 main.py                … オーケストレーション（全ソース取得→マージ→品質評価→保存→比較→レポート→通知）
 scrapers/
+  booking_scraper.py   … Booking.com（RapidAPI booking-com15）
   serpapi_hotels.py    … SerpAPI(Google Hotels): Booking/Agoda/Expedia を集約
-  rakuten_api.py       … 楽天トラベル公式API（亀の井別荘ほか）
+  rakuten_api.py       … 楽天トラベル公式API（ENOWA ほか在庫のある施設）
   jalan_scraper.py     … じゃらん（界由布院 / ENOWA）フォールバック
   ikyu_scraper.py      … 一休（亀の井別荘）+ 手動CSV補完 フォールバック
 core/
@@ -124,7 +125,19 @@ Booking.com/Agoda/Expedia はHTML直接取得が不可（Booking=202チャレン
 - `SERPAPI_HORIZON_DAYS` を小さく（例: 7）し、直近のみBooking系価格を取る
 - SerpAPI未設定でも**楽天API＋じゃらんは無料で毎回稼働**します（Booking系価格のみ欠落）
 
-### 5. 初回実行
+### 5. Booking.com（RapidAPI booking-com15・任意）
+
+Booking.com の価格は RapidAPI 経由でも取得できます（SerpAPIと併用/代替可）。
+
+1. https://rapidapi.com/ で **booking-com15** API をサブスクライブしAPIキー取得
+2. Actions Secret に `RAPIDAPI_KEY` を登録（`daily_price_check.yml` 設定済み）
+3. 取得日数は Actions Variable `BOOKING_HORIZON_DAYS`（既定30）で調整
+
+> ⚠️ **エンドポイントの注意**: `/api/v2/cars/...` は**レンタカー用**でホテル価格は取れません。
+> 本実装はホテル用の `searchDestination`→`searchHotels` を使用（`scrapers/booking_scraper.py`）。
+> SerpAPI と同様、1検索=1課金・1日付で全施設が返るため「取得日数=検索数」です。
+
+### 6. 初回実行
 
 Actions → **Price Check (polling)** → **Run workflow**
 
@@ -159,6 +172,9 @@ python -m pytest -q
 | `SERPAPI_KEY` | なし | SerpAPI キー（Booking系価格） |
 | `SERPAPI_HORIZON_DAYS` | `30` | SerpAPI で取得する日数（=検索数。コスト管理） |
 | `SERPAPI_QUERY` | `由布院温泉 旅館` | Google Hotels のエリア検索クエリ |
+| `RAPIDAPI_KEY` | なし | RapidAPI キー（Booking.com booking-com15） |
+| `BOOKING_HORIZON_DAYS` | `30` | Booking で取得する日数（=検索数。コスト管理） |
+| `BOOKING_QUERY` | `Yufuin` | Booking.com の目的地検索クエリ |
 
 ## データソース検証結果
 

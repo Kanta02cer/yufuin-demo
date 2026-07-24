@@ -6,6 +6,7 @@ from scrapers.jalan_scraper import scrape_jalan_hotel
 from scrapers.ikyu_scraper import scrape_ikyu_kamenoi, load_kamenoi_manual
 from scrapers.rakuten_api import scrape_all_rakuten
 from scrapers.serpapi_hotels import scrape_google_hotels
+from scrapers.booking_scraper import scrape_booking
 from core import config, quality
 from core.compare import (
     save_prices,
@@ -63,6 +64,15 @@ async def collect_by_source() -> dict[str, dict[str, dict[str, int]]]:
         add("kamenoi_bessho", "manual", manual)
     except Exception as e:
         log.error("  → 亀の井別荘 取得失敗: %s", e)
+
+    # ── Booking.com (RapidAPI: booking-com15) ──────────────────────
+    log.info("Booking.com 取得中（RapidAPI）...")
+    try:
+        booking = await asyncio.to_thread(scrape_booking)
+        for hotel_key, dates in booking.items():
+            add(hotel_key, "booking", dates)
+    except Exception as e:
+        log.error("  → Booking.com 取得失敗: %s", e)
 
     # ── SerpAPI (Google Hotels: Booking/Agoda/Expedia 集約) ─────────
     log.info("Google Hotels 取得中（SerpAPI）...")

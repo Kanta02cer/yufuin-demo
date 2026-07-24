@@ -87,19 +87,37 @@ SERPAPI_HORIZON_DAYS: int = _env_int("SERPAPI_HORIZON_DAYS", 30)
 # Google Hotels のエリア検索クエリ（湯布院の競合を一括取得）
 SERPAPI_QUERY: str = os.environ.get("SERPAPI_QUERY", "由布院温泉 旅館")
 
-# Google Hotels の施設名 → hotel_key マッチング用キーワード
-# （SerpAPI 結果の property 名に含まれる文字列で判定）
-SERPAPI_HOTEL_MATCH: dict[str, list[str]] = {
-    "kai_yufuin": ["界 由布院", "界由布院", "KAI Yufuin"],
-    "kamenoi_bessho": ["亀の井別荘", "Kamenoi"],
+# 施設名 → hotel_key マッチング用キーワード（API結果の施設名に含まれる文字列で判定）
+# SerpAPI / Booking(RapidAPI) など、施設名ベースで照合する全ソースで共有する。
+HOTEL_NAME_MATCH: dict[str, list[str]] = {
+    "kai_yufuin": ["界 由布院", "界由布院", "KAI Yufuin", "Kai Yufuin"],
+    "kamenoi_bessho": ["亀の井別荘", "Kamenoi", "Kamenoi Besso"],
     "enowa_yufuin": ["ENOWA", "エノワ"],
 }
+# 後方互換エイリアス
+SERPAPI_HOTEL_MATCH = HOTEL_NAME_MATCH
+
+# ── Booking.com (RapidAPI: booking-com15) ───────────────────────────
+# Booking.com はHTML直接取得不可（202チャレンジ）。RapidAPI の booking-com15
+# 経由で公式に近いホテル価格をJSONで取得する。https://rapidapi.com/ でキー発行。
+# 注意: /cars/ 系はレンタカー用。ホテルは searchDestination→searchHotels を使う。
+RAPIDAPI_KEY: str | None = os.environ.get("RAPIDAPI_KEY") or None
+BOOKING_RAPIDAPI_HOST: str = os.environ.get(
+    "BOOKING_RAPIDAPI_HOST", "booking-com15.p.rapidapi.com"
+)
+# 1検索=1課金・1日付で全施設が返るため、監視日数=検索数（コスト管理）
+BOOKING_HORIZON_DAYS: int = _env_int("BOOKING_HORIZON_DAYS", 30)
+# 由布院の Booking.com 目的地検索クエリ
+BOOKING_QUERY: str = os.environ.get("BOOKING_QUERY", "Yufuin")
 
 # ── ソース優先度と表示ラベル（複数ソース併用時のマージ順） ───────────
 # 前のソースで価格が取れなければ次のソースで補完する。
-SOURCE_PRIORITY: list[str] = ["serpapi_google", "rakuten", "jalan", "ikyu", "manual"]
+SOURCE_PRIORITY: list[str] = [
+    "booking", "serpapi_google", "rakuten", "jalan", "ikyu", "manual",
+]
 
 SOURCE_LABELS: dict[str, str] = {
+    "booking": "Booking.com",
     "serpapi_google": "Google/Booking系",
     "rakuten": "楽天",
     "jalan": "じゃらん",

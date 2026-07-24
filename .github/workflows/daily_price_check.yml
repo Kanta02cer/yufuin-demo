@@ -69,6 +69,8 @@ jobs:
           RAKUTEN_ORIGIN: ${{ vars.RAKUTEN_ORIGIN }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           SERPAPI_HORIZON_DAYS: ${{ vars.SERPAPI_HORIZON_DAYS }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          BOOKING_HORIZON_DAYS: ${{ vars.BOOKING_HORIZON_DAYS }}
         run: |
           set +e
           python main.py

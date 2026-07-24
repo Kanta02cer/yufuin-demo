@@ -28,7 +28,7 @@ def _match_hotel_key(property_name: str) -> str | None:
     """Google Hotels の施設名を監視対象の hotel_key にマッチさせる。"""
     if not property_name:
         return None
-    for hotel_key, keywords in config.SERPAPI_HOTEL_MATCH.items():
+    for hotel_key, keywords in config.HOTEL_NAME_MATCH.items():
         for kw in keywords:
             if kw.lower() in property_name.lower():
                 return hotel_key

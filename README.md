@@ -134,8 +134,10 @@ Booking.com の価格は RapidAPI 経由でも取得できます（SerpAPIと併
 3. 取得日数は Actions Variable `BOOKING_HORIZON_DAYS`（既定30）で調整
 
 > ⚠️ **エンドポイントの注意**: `/api/v2/cars/...` は**レンタカー用**でホテル価格は取れません。
-> 本実装はホテル用の `searchDestination`→`searchHotels` を使用（`scrapers/booking_scraper.py`）。
-> SerpAPI と同様、1検索=1課金・1日付で全施設が返るため「取得日数=検索数」です。
+> 本実装はホテル用の `searchHotels`（施設別 dest_id 指定）を使用（`scrapers/booking_scraper.py`）。
+> 対象施設の dest_id は `core/config.py` の `BOOKING_HOTEL_DEST`（ENOWA=9609444）で管理。
+> 実キー検証で **ENOWA の実価格取得を確認**（例 2026-08-01 ¥78,167）。界由布院・亀の井別荘は
+> Booking.com に掲載が見つからないため対象外（じゃらん/一休/手動CSVで取得）。
 
 ### 6. 初回実行
 
@@ -173,8 +175,7 @@ python -m pytest -q
 | `SERPAPI_HORIZON_DAYS` | `30` | SerpAPI で取得する日数（=検索数。コスト管理） |
 | `SERPAPI_QUERY` | `由布院温泉 旅館` | Google Hotels のエリア検索クエリ |
 | `RAPIDAPI_KEY` | なし | RapidAPI キー（Booking.com booking-com15） |
-| `BOOKING_HORIZON_DAYS` | `30` | Booking で取得する日数（=検索数。コスト管理） |
-| `BOOKING_QUERY` | `Yufuin` | Booking.com の目的地検索クエリ |
+| `BOOKING_HORIZON_DAYS` | `30` | Booking で取得する日数（施設ごとの検索数。コスト管理） |
 
 ## データソース検証結果
 

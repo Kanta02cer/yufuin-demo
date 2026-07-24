@@ -105,10 +105,17 @@ RAPIDAPI_KEY: str | None = os.environ.get("RAPIDAPI_KEY") or None
 BOOKING_RAPIDAPI_HOST: str = os.environ.get(
     "BOOKING_RAPIDAPI_HOST", "booking-com15.p.rapidapi.com"
 )
-# 1検索=1課金・1日付で全施設が返るため、監視日数=検索数（コスト管理）
+# 1施設×1日付で1検索。監視日数=施設ごとの検索数（コスト管理）
 BOOKING_HORIZON_DAYS: int = _env_int("BOOKING_HORIZON_DAYS", 30)
-# 由布院の Booking.com 目的地検索クエリ
-BOOKING_QUERY: str = os.environ.get("BOOKING_QUERY", "Yufuin")
+
+# Booking.com の施設別 dest_id（searchDestination で確認済み）。
+# 注意: 由布院エリア検索(dest_id=7023)の上位には競合が出ないため、施設ごとに
+# 直接 dest_id を指定して取得する。実キー検証で判明した在庫実態:
+#   - ENOWA YUFUIN = 9609444（Booking.comに掲載・実価格取得を確認）
+#   - 界由布院・亀の井別荘は Booking.com に掲載が見つからない（Rakuten と同様）
+BOOKING_HOTEL_DEST: dict[str, int] = {
+    "enowa_yufuin": 9609444,
+}
 
 # ── ソース優先度と表示ラベル（複数ソース併用時のマージ順） ───────────
 # 前のソースで価格が取れなければ次のソースで補完する。

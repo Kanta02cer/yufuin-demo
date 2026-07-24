@@ -25,9 +25,10 @@ _SAMPLE = {
 }
 
 
-def test_extract_min_charge_picks_lowest_total():
-    # total(62000) と 90000 と hotelMinCharge(55000) の最安 = 55000
-    assert rakuten_api._extract_min_charge(_SAMPLE) == 55000
+def test_extract_min_charge_prefers_lowest_total():
+    # total を優先し最安を採用（62000 < 90000）。hotelMinCharge(55000)は
+    # total が取れる場合はフォールバック扱いで使わない。
+    assert rakuten_api._extract_min_charge(_SAMPLE) == 62000
 
 
 def test_extract_min_charge_empty_when_no_hotels():
@@ -44,12 +45,17 @@ def test_extract_min_charge_uses_daily_when_no_min_charge():
     assert rakuten_api._extract_min_charge(body) == 71000
 
 
+def test_extract_min_charge_fallback_to_min_charge_when_no_total():
+    body = {"hotels": [{"hotel": [{"hotelBasicInfo": {"hotelMinCharge": 48000}}]}]}
+    assert rakuten_api._extract_min_charge(body) == 48000
+
+
 def test_scrape_disabled_without_app_id(monkeypatch):
     monkeypatch.setattr(rakuten_api.config, "RAKUTEN_APP_ID", None)
-    assert rakuten_api.scrape_rakuten_kamenoi() == {}
+    assert rakuten_api.scrape_all_rakuten() == {}
 
 
 def test_scrape_skips_unknown_hotel(monkeypatch):
     monkeypatch.setattr(rakuten_api.config, "RAKUTEN_APP_ID", "dummy")
     monkeypatch.setattr(rakuten_api.config, "RAKUTEN_HOTEL_NOS", {})
-    assert rakuten_api.scrape_rakuten_hotel("kamenoi_bessho") == {}
+    assert rakuten_api.scrape_rakuten_hotel("enowa_yufuin") == {}

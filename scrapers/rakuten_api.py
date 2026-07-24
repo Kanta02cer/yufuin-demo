@@ -1,16 +1,16 @@
-"""楽天トラベル公式API による価格取得（亀の井別荘の代替ソース）。
+"""楽天トラベル公式API(VacantHotelSearch) による価格取得。
 
-一休(ikyu)はボット検知(403)で自動取得できず、楽天トラベルの施設ページHTMLも403で
-ブロックされる。一方、楽天トラベルの公式API(VacantHotelSearch)はボット検知がなく、
-無料のアプリID(applicationId)だけで日付別の空室・価格JSONを返す。
+2026年のインフラ刷新でセキュリティが強化された新仕様に対応:
+  - エンドポイント: openapi.rakuten.co.jp/engine/api/...
+  - applicationId は「クエリ」、accessKey は「HTTPヘッダ」で送る
+  - Origin / Referer ヘッダが Developer Console の Allowed websites と一致必須
+    （未一致だと 403 REQUEST_CONTEXT_BODY_HTTP_REFERRER_MISSING）
 
-  検証結果（本モジュール実装時）:
-    - openapi.rakuten.co.jp/.../VacantHotelSearch は到達可能
-    - hotelNo=180627(亀の井別荘) 実クエリで正規のJSONエラー
-      "applicationId must be present" を返す = キーを入れれば取得可能
+  実データ検証（本実装時, 実キーで確認）:
+    - ENOWA YUFUIN(hotelNo=187963) の実価格取得に成功（例 2026-08-01 ¥81,890/2名）
+    - 界由布院・亀の井別荘は楽天トラベルに在庫が無く取得不可（config 参照）
 
-環境変数 RAKUTEN_APP_ID が未設定の場合は何もせず {} を返す（安全に無効化）。
-既存の品質ガード・手動CSV補完と組み合わせて使う。
+環境変数 RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY 未設定時は {} を返す（安全に無効化）。
 """
 import json
 import time
@@ -21,7 +21,7 @@ from datetime import date, timedelta
 
 from core import config
 
-API_URL = "https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426"
+API_URL = "https://openapi.rakuten.co.jp/engine/api/Travel/VacantHotelSearch/20170426"
 
 # レート制限対策: 同一URLへの短時間連続アクセスは一時的に弾かれ得るため間隔を空ける
 _REQUEST_INTERVAL_SEC = 1.0
@@ -39,12 +39,16 @@ def _min_charge_for_date(hotel_no: int, checkin: date, adult_num: int, log) -> i
         "adultNum": adult_num,
         "format": "json",
     }
-    if config.RAKUTEN_ACCESS_KEY:
-        params["accessKey"] = config.RAKUTEN_ACCESS_KEY
-
     url = API_URL + "?" + urllib.parse.urlencode(params)
+    # 2026年新仕様: accessKey はヘッダ、Origin/Referer は登録ドメインと一致必須
+    headers = {
+        "accessKey": config.RAKUTEN_ACCESS_KEY or "",
+        "Origin": config.RAKUTEN_ORIGIN,
+        "Referer": config.RAKUTEN_REFERER,
+    }
+    req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT_SEC) as resp:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         # 404 = 該当日の空室なし（正常系）。それ以外は劣化として記録。
@@ -55,34 +59,40 @@ def _min_charge_for_date(hotel_no: int, checkin: date, adult_num: int, log) -> i
         log.debug("  [rakuten] %s 取得失敗: %s", checkin, e)
         return None
 
+    # 認証エラー等（HTTP 200 で errorのことがある）
+    if isinstance(body, dict) and (body.get("error") or body.get("errors")):
+        # not_found = 空室なし（正常）。それ以外は警告。
+        err = body.get("error") or body.get("errors")
+        if err != "not_found":
+            log.debug("  [rakuten] %s APIエラー: %s", checkin, err)
+        return None
+
     return _extract_min_charge(body)
 
 
 def _extract_min_charge(body: dict) -> int | None:
-    """VacantHotelSearch レスポンスから最安料金を抽出する。"""
+    """VacantHotelSearch レスポンスから最安の総額(total)を抽出する。"""
     hotels = body.get("hotels")
     if not hotels:
         return None
-    charges: list[int] = []
+    totals: list[int] = []
+    fallbacks: list[int] = []
     for hotel in hotels:
-        # hotels[].hotel[].roomInfo[].dailyCharge.total などにネスト
         for entry in hotel.get("hotel", []):
-            room_info = entry.get("roomInfo")
-            if not room_info:
-                continue
-            for room in room_info:
+            for room in entry.get("roomInfo") or []:
                 daily = room.get("dailyCharge") or {}
-                for key in ("total", "rakutenCharge"):
-                    val = daily.get(key)
-                    if isinstance(val, int) and val > 0:
-                        charges.append(val)
-        # hotelMinCharge（施設単位の最安）もフォールバックに使う
-        for entry in hotel.get("hotel", []):
+                total = daily.get("total")
+                if isinstance(total, int) and total > 0:
+                    totals.append(total)
+                elif isinstance(daily.get("rakutenCharge"), int) and daily["rakutenCharge"] > 0:
+                    fallbacks.append(daily["rakutenCharge"])
             basic = entry.get("hotelBasicInfo") or {}
             mc = basic.get("hotelMinCharge")
             if isinstance(mc, int) and mc > 0:
-                charges.append(mc)
-    return min(charges) if charges else None
+                fallbacks.append(mc)
+    if totals:
+        return min(totals)
+    return min(fallbacks) if fallbacks else None
 
 
 def scrape_rakuten_hotel(hotel_key: str, adult_num: int = 2) -> dict[str, int]:
@@ -116,6 +126,19 @@ def scrape_rakuten_hotel(hotel_key: str, adult_num: int = 2) -> dict[str, int]:
     return prices
 
 
-def scrape_rakuten_kamenoi(adult_num: int = 2) -> dict[str, int]:
-    """亀の井別荘（楽天トラベル hotelNo=180627）の日別最安料金を返す。"""
-    return scrape_rakuten_hotel("kamenoi_bessho", adult_num=adult_num)
+def scrape_all_rakuten(adult_num: int = 2) -> dict[str, dict[str, int]]:
+    """RAKUTEN_HOTEL_NOS に登録された全施設の日別価格を返す。
+
+    戻り値: {hotel_key: {check_date: price}}
+    RAKUTEN_APP_ID 未設定時は {} を返す。
+    """
+    log = config.setup_logging()
+    if not config.RAKUTEN_APP_ID:
+        log.info("  [rakuten] RAKUTEN_APP_ID 未設定のためスキップ")
+        return {}
+    result: dict[str, dict[str, int]] = {}
+    for hotel_key in config.RAKUTEN_HOTEL_NOS:
+        dates = scrape_rakuten_hotel(hotel_key, adult_num=adult_num)
+        if dates:
+            result[hotel_key] = dates
+    return result

@@ -4,7 +4,7 @@ from datetime import date
 
 from scrapers.jalan_scraper import scrape_jalan_hotel
 from scrapers.ikyu_scraper import scrape_ikyu_kamenoi, load_kamenoi_manual
-from scrapers.rakuten_api import scrape_rakuten_kamenoi
+from scrapers.rakuten_api import scrape_all_rakuten
 from scrapers.serpapi_hotels import scrape_google_hotels
 from core import config, quality
 from core.compare import (
@@ -42,17 +42,23 @@ async def collect_by_source() -> dict[str, dict[str, dict[str, int]]]:
         except Exception as e:
             log.error("  → %s じゃらん取得失敗: %s", label, e)
 
-    # ── 亀の井別荘（楽天API → 一休 → 手動CSV）───────────────────────
-    log.info("亀の井別荘 取得中...")
+    # ── 楽天トラベル公式API（在庫のある施設: ENOWA など）───────────
+    log.info("楽天トラベルAPI 取得中...")
     try:
-        rakuten = await asyncio.to_thread(scrape_rakuten_kamenoi)
-        add("kamenoi_bessho", "rakuten", rakuten)
-        log.info("  → 楽天API %d 日分", len(rakuten))
-        if not rakuten:
-            log.info("  → 楽天API未取得、一休スクレイパにフォールバック")
-            ikyu = await scrape_ikyu_kamenoi()
-            add("kamenoi_bessho", "ikyu", ikyu)
-            log.info("  → 一休 %d 日分", len(ikyu))
+        rakuten = await asyncio.to_thread(scrape_all_rakuten)
+        for hotel_key, dates in rakuten.items():
+            add(hotel_key, "rakuten", dates)
+            log.info("  → 楽天 %s: %d 日分", config.HOTEL_NAMES.get(hotel_key, hotel_key), len(dates))
+    except Exception as e:
+        log.error("  → 楽天API取得失敗: %s", e)
+
+    # ── 亀の井別荘（楽天在庫なし → 一休 → 手動CSV）─────────────────
+    # 亀の井別荘は楽天トラベルに在庫が無いため、一休スクレイパ＋手動CSVで取得。
+    log.info("亀の井別荘 取得中（一休/手動）...")
+    try:
+        ikyu = await scrape_ikyu_kamenoi()
+        add("kamenoi_bessho", "ikyu", ikyu)
+        log.info("  → 一休 %d 日分", len(ikyu))
         manual = load_kamenoi_manual()
         add("kamenoi_bessho", "manual", manual)
     except Exception as e:

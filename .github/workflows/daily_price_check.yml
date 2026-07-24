@@ -65,6 +65,8 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
           RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          RAKUTEN_REFERER: ${{ vars.RAKUTEN_REFERER }}
+          RAKUTEN_ORIGIN: ${{ vars.RAKUTEN_ORIGIN }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           SERPAPI_HORIZON_DAYS: ${{ vars.SERPAPI_HORIZON_DAYS }}
         run: |

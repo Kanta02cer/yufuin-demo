@@ -53,16 +53,25 @@ MIN_ROWS_PER_HOTEL: int = _env_int("MIN_ROWS_PER_HOTEL", 30)
 # 良データを空データで上書きしない（過去CSVを保護する）。
 MIN_TOTAL_ROWS: int = _env_int("MIN_TOTAL_ROWS", 10)
 
-# ── 楽天トラベル公式API（亀の井別荘の代替ソース） ───────────────────
-# 一休(ikyu)はボット検知(403)で取得不可。楽天トラベルの施設ページHTMLも403だが、
-# 公式API(VacantHotelSearch)はボット検知なしでJSONを返す。
-# https://webservice.rakuten.co.jp/ で無料のアプリID(applicationId)を発行して設定する。
+# ── 楽天トラベル公式API（VacantHotelSearch / 2026年新仕様） ──────────
+# https://webservice.rakuten.co.jp/ でアプリID + アクセスキーを発行。
+# 2026年更新でセキュリティ強化: accessKey を「ヘッダ」で送り、Origin/Referer が
+# 登録ドメイン（Developer Console の Allowed websites）と一致する必要がある。
 RAKUTEN_APP_ID: str | None = os.environ.get("RAKUTEN_APP_ID") or None
 RAKUTEN_ACCESS_KEY: str | None = os.environ.get("RAKUTEN_ACCESS_KEY") or None
 
-# 楽天トラベルの施設番号（WebSearch/KeywordHotelSearch で確認済み）
+# Developer Console の Allowed websites に登録したドメインと一致させること。
+# 未一致だと REQUEST_CONTEXT_BODY_HTTP_REFERRER_MISSING で 403 になる。
+RAKUTEN_REFERER: str = os.environ.get("RAKUTEN_REFERER", "https://kanta02cer.github.io/")
+RAKUTEN_ORIGIN: str = os.environ.get("RAKUTEN_ORIGIN", "https://kanta02cer.github.io")
+
+# 楽天トラベルAPIの hotelNo（KeywordHotelSearch で実在庫を確認済み）。
+# 注意: 施設ページURLの HOTEL/NNNNN 番号はAPIのhotelNoとは別物。
+#   - ENOWA YUFUIN = 187963（楽天トラベルに在庫あり・確認済み）
+#   - 界 由布院 / 亀の井別荘 は楽天トラベルに在庫が無い（掲載なし）ため対象外。
+#     → 界=じゃらん、亀の井=一休/手動CSV/SerpAPI で取得する。
 RAKUTEN_HOTEL_NOS: dict[str, int] = {
-    "kamenoi_bessho": 180627,  # 亀の井別荘
+    "enowa_yufuin": 187963,
 }
 
 # ── SerpAPI (Google Hotels) ─────────────────────────────────────────

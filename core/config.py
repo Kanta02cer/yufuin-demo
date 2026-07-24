@@ -65,6 +65,40 @@ RAKUTEN_HOTEL_NOS: dict[str, int] = {
     "kamenoi_bessho": 180627,  # 亀の井別荘
 }
 
+# ── SerpAPI (Google Hotels) ─────────────────────────────────────────
+# Booking.com / Agoda / Expedia 等はHTMLを直接取得できない（ボット検知 403/202）。
+# Google Hotels を集約する SerpAPI 経由でこれらの価格を合法的に取得する。
+# https://serpapi.com/ でAPIキーを取得して設定する（無料枠 月100検索）。
+SERPAPI_KEY: str | None = os.environ.get("SERPAPI_KEY") or None
+
+# SerpAPI は1検索=1課金。エリア検索1回で全施設×1日付が取れるため、
+# 監視日数=検索数。コスト管理のため既定を短めにする（本日から N 日先まで）。
+SERPAPI_HORIZON_DAYS: int = _env_int("SERPAPI_HORIZON_DAYS", 30)
+
+# Google Hotels のエリア検索クエリ（湯布院の競合を一括取得）
+SERPAPI_QUERY: str = os.environ.get("SERPAPI_QUERY", "由布院温泉 旅館")
+
+# Google Hotels の施設名 → hotel_key マッチング用キーワード
+# （SerpAPI 結果の property 名に含まれる文字列で判定）
+SERPAPI_HOTEL_MATCH: dict[str, list[str]] = {
+    "kai_yufuin": ["界 由布院", "界由布院", "KAI Yufuin"],
+    "kamenoi_bessho": ["亀の井別荘", "Kamenoi"],
+    "enowa_yufuin": ["ENOWA", "エノワ"],
+}
+
+# ── ソース優先度と表示ラベル（複数ソース併用時のマージ順） ───────────
+# 前のソースで価格が取れなければ次のソースで補完する。
+SOURCE_PRIORITY: list[str] = ["serpapi_google", "rakuten", "jalan", "ikyu", "manual"]
+
+SOURCE_LABELS: dict[str, str] = {
+    "serpapi_google": "Google/Booking系",
+    "rakuten": "楽天",
+    "jalan": "じゃらん",
+    "ikyu": "一休",
+    "manual": "手動",
+    "legacy": "旧データ",
+}
+
 # ── 通知設定 ─────────────────────────────────────────────────────────
 SLACK_WEBHOOK_URL: str | None = os.environ.get("SLACK_WEBHOOK_URL") or None
 

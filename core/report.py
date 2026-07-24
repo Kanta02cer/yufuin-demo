@@ -43,12 +43,15 @@ tr:hover td{background:#fafafa}
 .status-banner{padding:10px 14px;border-radius:6px;font-size:.85rem;margin-bottom:16px;font-weight:600}
 .status-banner.failed{background:#fdedec;color:#c0392b;border:1px solid #f5b7b1}
 .status-banner.degraded{background:#fef9e7;color:#b9770e;border:1px solid #f9e79f}
+.src{font-size:.62rem;color:#999;display:block;font-weight:400;margin-top:1px}
+.legend{font-size:.75rem;color:#777;margin-top:8px}
+.legend .src-badge{display:inline-block;background:#eef;color:#556;border-radius:6px;padding:1px 7px;margin-right:6px}
 </style>
 </head>
 <body>
 <div class="header">
   <h1>競合価格モニター｜Sevenxseven 由布院</h1>
-  <div class="sub">最終更新: {{ updated_at }} JST　|　2名1室・指定プラン最低価格</div>
+  <div class="sub">最終更新: {{ updated_at }} JST　|　2名1室・最安価格（複数OTA横断）</div>
 </div>
 <div class="container">
 
@@ -70,7 +73,7 @@ tr:hover td{background:#fafafa}
   {% endif %}
 
   <div class="card">
-    <h2>⚠️ 本日の変動アラート（前日比 ±5%以上）</h2>
+    <h2>⚠️ 直近の変動アラート（前回取得比 ±5%以上）</h2>
     {% if changes %}
     <table class="alert-tbl">
       <thead><tr><th>宿泊日</th><th>施設</th><th>前日価格</th><th>本日価格</th><th>変動率</th></tr></thead>
@@ -93,11 +96,11 @@ tr:hover td{background:#fafafa}
       </tbody>
     </table>
     {% else %}
-    <p class="no-alert">前日から5%以上の変動はありません。</p>
+    <p class="no-alert">前回取得から5%以上の変動はありません。</p>
     {% endif %}
   </div>
 
-  <div class="sec-title">全日程一覧（今日から180日分）</div>
+  <div class="sec-title">全日程一覧（今日から{{ horizon_days }}日分・各セルは最安OTAの価格）</div>
   <div class="card" style="padding:0;overflow:auto">
     <table class="main-tbl">
       <thead>
@@ -112,13 +115,18 @@ tr:hover td{background:#fafafa}
       {% for row in rows %}
       <tr>
         <td class="{{ row.day_cls }}">{{ row.label }}</td>
-        <td class="{{ row.kai_cls }}">{{ row.kai }}</td>
-        <td class="{{ row.kamenoi_cls }}">{{ row.kamenoi }}</td>
-        <td class="{{ row.enowa_cls }}">{{ row.enowa }}</td>
+        <td class="{{ row.kai_cls }}">{{ row.kai }}{% if row.kai_src %}<span class="src">{{ row.kai_src }}</span>{% endif %}</td>
+        <td class="{{ row.kamenoi_cls }}">{{ row.kamenoi }}{% if row.kamenoi_src %}<span class="src">{{ row.kamenoi_src }}</span>{% endif %}</td>
+        <td class="{{ row.enowa_cls }}">{{ row.enowa }}{% if row.enowa_src %}<span class="src">{{ row.enowa_src }}</span>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
+  </div>
+  <div class="legend">
+    価格の取得元:
+    {% for key, label in source_legend %}<span class="src-badge">{{ label }}</span>{% endfor %}
+    各セルの下に実際に採用したOTAを表示しています。
   </div>
 
 </div>
@@ -138,14 +146,20 @@ def generate_report(
     changes: list[dict],
     run_date: str,
     health=None,
+    source_map: dict | None = None,
 ) -> Path:
     DOCS_DIR.mkdir(exist_ok=True)
+    source_map = source_map or {}
 
     change_map = {(c["hotel_key"], c["check_date"]): c["direction"] for c in changes}
 
     def cls(hotel_key: str, ds: str) -> str:
         d = change_map.get((hotel_key, ds))
         return "up" if d == "up" else ("down" if d == "down" else "")
+
+    def src_label(hotel_key: str, ds: str) -> str:
+        s = source_map.get(hotel_key, {}).get(ds)
+        return config.SOURCE_LABELS.get(s, s) if s else ""
 
     today = date.fromisoformat(run_date)
     rows = []
@@ -159,19 +173,32 @@ def generate_report(
                 "day_cls": "sun" if wd == 6 else ("sat" if wd == 5 else ""),
                 "kai": _fmt(today_prices.get("kai_yufuin", {}).get(ds)),
                 "kai_cls": cls("kai_yufuin", ds),
+                "kai_src": src_label("kai_yufuin", ds),
                 "kamenoi": _fmt(today_prices.get("kamenoi_bessho", {}).get(ds)),
                 "kamenoi_cls": cls("kamenoi_bessho", ds),
+                "kamenoi_src": src_label("kamenoi_bessho", ds),
                 "enowa": _fmt(today_prices.get("enowa_yufuin", {}).get(ds)),
                 "enowa_cls": cls("enowa_yufuin", ds),
+                "enowa_src": src_label("enowa_yufuin", ds),
             }
         )
         current += timedelta(days=1)
+
+    # レポートに登場したソースだけを凡例に出す
+    used = {s for h in source_map.values() for s in h.values()}
+    source_legend = [
+        (k, config.SOURCE_LABELS.get(k, k))
+        for k in config.SOURCE_PRIORITY + ["legacy"]
+        if k in used
+    ]
 
     html = Template(_TEMPLATE).render(
         updated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         changes=changes,
         rows=rows,
         health=health,
+        horizon_days=config.HORIZON_DAYS,
+        source_legend=source_legend,
     )
     out = DOCS_DIR / "index.html"
     out.write_text(html, encoding="utf-8")

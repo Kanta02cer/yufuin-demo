@@ -1,8 +1,9 @@
-name: Daily Price Check
+name: Price Check (polling)
 
 on:
   schedule:
-    - cron: '0 22 * * *'  # 07:00 JST
+    # 短間隔ポーリング: 6時間ごと（UTC 0,6,12,18 = JST 9,15,21,3時）
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -64,6 +65,8 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
           RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          SERPAPI_HORIZON_DAYS: ${{ vars.SERPAPI_HORIZON_DAYS }}
         run: |
           set +e
           python main.py
@@ -90,7 +93,8 @@ jobs:
           git config user.name "price-monitor[bot]"
           git config user.email "price-monitor@users.noreply.github.com"
           git add data/ docs/
-          git diff --cached --quiet || git commit -m "chore: price update $(date +'%Y-%m-%d')"
+          git diff --cached --quiet || git commit -m "chore: price update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git pull --rebase origin HEAD || true
           git push origin HEAD
 
       - name: Fail job if price check failed

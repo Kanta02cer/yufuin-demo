@@ -56,7 +56,7 @@ def send_slack_alert(changes: list[dict], run_date: str) -> None:
     if not changes:
         return
 
-    lines = [f"*競合価格アラート｜{run_date}*（前日比 ±5%以上）"]
+    lines = [f"*競合価格アラート｜{run_date}*（前回取得比 ±5%以上）"]
     for c in changes[:20]:  # 最大20件
         direction = "▲" if c["direction"] == "up" else "▼"
         rate = abs(c["change_rate"]) * 100

@@ -62,6 +62,21 @@ Name: `SLACK_WEBHOOK_URL` / Value: Incoming Webhook の URL
 
 未設定でも動作しますが、**障害通知が飛ばない**ため本番では設定を推奨します。
 
+### 3. 楽天トラベル API（亀の井別荘の安定取得・推奨）
+
+亀の井別荘は一休(ikyu)のボット検知で自動取得できません（下記「既知の課題」参照）。
+**楽天トラベル公式API** を使うとボット検知なしで安定取得できます。
+
+1. https://webservice.rakuten.co.jp/ でアプリID(applicationId)を無料発行
+2. Actions Secret に登録:
+   - `RAKUTEN_APP_ID`（必須）
+   - `RAKUTEN_ACCESS_KEY`（発行時に併記されていれば設定）
+3. ワークフローの env に受け渡す（`daily_price_check.yml` 設定済み）
+
+`RAKUTEN_APP_ID` を設定すると `main.py` は亀の井別荘を楽天API優先で取得し、
+未設定/失敗時は従来の一休スクレイパ＋手動CSVにフォールバックします。
+施設番号は `core/config.py` の `RAKUTEN_HOTEL_NOS`（亀の井別荘=180627）で管理します。
+
 ### 3. 初回実行
 
 Actions → **Daily Price Check** → **Run workflow**
@@ -93,10 +108,26 @@ python -m pytest -q
 | `MIN_TOTAL_ROWS` | `10` | これ以下で「実行失敗」判定（前日データ保護） |
 | `SLACK_WEBHOOK_URL` | なし | Slack Incoming Webhook |
 
+## データソース検証結果
+
+各サイトへの到達性を実地検証した結果（この環境から確認）:
+
+| ソース | 到達性 | 備考 |
+|--------|--------|------|
+| 一休(ikyu) HTML | ❌ 403 | ボット検知で取得不可 |
+| 楽天トラベル 施設ページ HTML | ❌ 403 | サイトHTMLは楽天もブロック |
+| **楽天トラベル 公式API** | ✅ 到達可 | `VacantHotelSearch` が JSON を返す（要 applicationId、無料）。亀の井別荘=180627 |
+| じゃらん HTML | ⚠️ 200 | 現行動作するがDOM/プラン変更に脆い |
+
+**要点: サイトHTMLの直接スクレイピングは弱いサイトを探しても403の壁に当たる。**
+**突破口は "スクレイピング" ではなく "公式API"。** 亀の井別荘は楽天API(`scrapers/rakuten_api.py`)で安定取得できる。
+
 ## 既知の課題 / 今後の改善
 
-- **亀の井別荘（一休）の自動取得**: 一休のボット検知が強く、実運用では取得が安定しません。
-  現状は `data/kamenoi_manual.csv`（`check_date,price` 形式）による手動補完に依存します。
-  安定化には一休の公式APIまたは取得プロキシの検討が必要です。
+- **亀の井別荘の取得**: 一休(ikyu)はボット検知(403)で不可。**楽天トラベルAPIの利用を推奨**
+  （上記「セットアップ 3」）。API未設定時は一休スクレイパ＋`data/kamenoi_manual.csv` に
+  フォールバックします。
 - **じゃらんの取得安定性**: プランコード/DOMの変更で取得0件になる日があります。
-  失敗は上記の障害保護と Slack 通知で検知できます。
+  将来的には界由布院・ENOWA も楽天トラベルAPIへ移行すると安定します
+  （`RAKUTEN_HOTEL_NOS` に施設番号を追加すれば同じ仕組みで取得可能）。
+- 取得失敗は障害保護（前日データ保護）と Slack 通知で検知できます。

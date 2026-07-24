@@ -53,6 +53,18 @@ MIN_ROWS_PER_HOTEL: int = _env_int("MIN_ROWS_PER_HOTEL", 30)
 # 良データを空データで上書きしない（過去CSVを保護する）。
 MIN_TOTAL_ROWS: int = _env_int("MIN_TOTAL_ROWS", 10)
 
+# ── 楽天トラベル公式API（亀の井別荘の代替ソース） ───────────────────
+# 一休(ikyu)はボット検知(403)で取得不可。楽天トラベルの施設ページHTMLも403だが、
+# 公式API(VacantHotelSearch)はボット検知なしでJSONを返す。
+# https://webservice.rakuten.co.jp/ で無料のアプリID(applicationId)を発行して設定する。
+RAKUTEN_APP_ID: str | None = os.environ.get("RAKUTEN_APP_ID") or None
+RAKUTEN_ACCESS_KEY: str | None = os.environ.get("RAKUTEN_ACCESS_KEY") or None
+
+# 楽天トラベルの施設番号（WebSearch/KeywordHotelSearch で確認済み）
+RAKUTEN_HOTEL_NOS: dict[str, int] = {
+    "kamenoi_bessho": 180627,  # 亀の井別荘
+}
+
 # ── 通知設定 ─────────────────────────────────────────────────────────
 SLACK_WEBHOOK_URL: str | None = os.environ.get("SLACK_WEBHOOK_URL") or None
 

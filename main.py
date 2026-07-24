@@ -4,6 +4,7 @@ from datetime import date
 
 from scrapers.jalan_scraper import scrape_jalan_hotel
 from scrapers.ikyu_scraper import scrape_ikyu_kamenoi, load_kamenoi_manual
+from scrapers.rakuten_api import scrape_rakuten_kamenoi
 from core import config, quality
 from core.compare import save_prices, find_previous_csv, load_prices, detect_changes
 from core.report import generate_report
@@ -30,7 +31,17 @@ async def collect_prices() -> dict[str, dict]:
 
     log.info("亀の井別荘 取得中...")
     try:
-        today_prices["kamenoi_bessho"] = await scrape_ikyu_kamenoi()
+        # 優先: 楽天トラベル公式API（RAKUTEN_APP_ID 設定時）。
+        # 一休(ikyu)はボット検知で取得不可のため、API があればそちらを主とする。
+        kamenoi = await asyncio.to_thread(scrape_rakuten_kamenoi)
+        source = "rakuten-api"
+        # 楽天APIが無効/失敗なら従来の一休スクレイパにフォールバック
+        if not kamenoi:
+            log.info("  → 楽天API未取得、一休スクレイパにフォールバック")
+            kamenoi = await scrape_ikyu_kamenoi()
+            source = "ikyu-scrape"
+        today_prices["kamenoi_bessho"] = kamenoi
+        log.info("  → 亀の井別荘 ソース: %s", source)
         manual = load_kamenoi_manual()
         if manual:
             added = sum(

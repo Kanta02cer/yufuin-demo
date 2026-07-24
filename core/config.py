@@ -13,6 +13,35 @@ DATA_DIR = ROOT_DIR / "data"
 DOCS_DIR = ROOT_DIR / "docs"
 DEBUG_DIR = DATA_DIR / "debug"
 
+
+# ── .env 読み込み（ゼロ依存・ローカル用） ────────────────────────────
+def _load_dotenv() -> None:
+    """プロジェクト直下の .env を os.environ に読み込む（既存の環境変数を優先）。
+
+    APIキーをコードに直書きせず、gitignore された .env で管理するための仕組み。
+    本番(GitHub Actions)では Secrets が環境変数として渡るため .env は使わない。
+    外部ライブラリ不要。
+    """
+    env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            # 実際の環境変数（本番Secrets等）が設定済みならそちらを優先
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except Exception:
+        pass
+
+
+_load_dotenv()
+
 # ── 施設定義（表示名） ───────────────────────────────────────────────
 HOTEL_NAMES: dict[str, str] = {
     "kai_yufuin": "界 由布院",

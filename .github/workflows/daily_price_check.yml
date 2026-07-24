@@ -10,9 +10,35 @@ permissions:
   pages: write
   id-token: write
 
+# 同時実行を防ぐ（前回が長引いても push 競合を起こさない）
+concurrency:
+  group: daily-price-check
+  cancel-in-progress: false
+
 jobs:
-  price-check:
+  test:
     runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: python -m pytest -q
+
+  price-check:
+    needs: test
+    runs-on: ubuntu-22.04
+    outputs:
+      run_rc: ${{ steps.run.outputs.rc }}
 
     steps:
       - name: Checkout
@@ -33,9 +59,20 @@ jobs:
           playwright install-deps chromium
 
       - name: Run price check
+        id: run
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: python main.py
+        run: |
+          set +e
+          python main.py
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::価格取得が失敗/劣化しました (exit=$rc)。前日データは保護され、レポートに失敗表示が出ます。"
+          fi
+          # レポート生成・保護は main.py 内で完結しているため、後続の
+          # コミット/デプロイは常に実行する（rc は最後にジョブ結果へ反映）。
+          exit 0
 
       - name: Upload debug HTML (if any)
         if: always()
@@ -53,6 +90,12 @@ jobs:
           git add data/ docs/
           git diff --cached --quiet || git commit -m "chore: price update $(date +'%Y-%m-%d')"
           git push origin HEAD
+
+      - name: Fail job if price check failed
+        if: steps.run.outputs.rc != '0'
+        run: |
+          echo "価格取得に失敗しました (exit=${{ steps.run.outputs.rc }})。監視のためジョブを失敗としてマークします。"
+          exit 1
 
   deploy-pages:
     needs: price-check

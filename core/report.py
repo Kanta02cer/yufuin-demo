@@ -3,7 +3,9 @@ from pathlib import Path
 
 from jinja2 import Template
 
-DOCS_DIR = Path(__file__).parent.parent / "docs"
+from core import config
+
+DOCS_DIR = config.DOCS_DIR
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="ja">
@@ -33,6 +35,14 @@ tr:hover td{background:#fafafa}
 .sec-title{font-size:.9rem;font-weight:600;color:#555;margin:20px 0 10px}
 .sat{color:#2471a3}
 .sun{color:#c0392b}
+.health{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.chip{font-size:.78rem;padding:3px 10px;border-radius:12px;font-weight:600}
+.chip.ok{background:#eafaf1;color:#1e8449}
+.chip.degraded{background:#fef9e7;color:#b9770e}
+.chip.empty{background:#fdedec;color:#c0392b}
+.status-banner{padding:10px 14px;border-radius:6px;font-size:.85rem;margin-bottom:16px;font-weight:600}
+.status-banner.failed{background:#fdedec;color:#c0392b;border:1px solid #f5b7b1}
+.status-banner.degraded{background:#fef9e7;color:#b9770e;border:1px solid #f9e79f}
 </style>
 </head>
 <body>
@@ -41,6 +51,23 @@ tr:hover td{background:#fafafa}
   <div class="sub">最終更新: {{ updated_at }} JST　|　2名1室・指定プラン最低価格</div>
 </div>
 <div class="container">
+
+  {% if health and health.verdict == "failed" %}
+  <div class="status-banner failed">🔴 取得失敗: 本日の取得はほぼ全滅（合計 {{ health.total_rows }} 件）。表は直近の取得データを保持しています。</div>
+  {% elif health and health.verdict == "degraded" %}
+  <div class="status-banner degraded">🟡 データ劣化: 一部施設の取得件数が不足しています。下記の取得状況をご確認ください。</div>
+  {% endif %}
+
+  {% if health %}
+  <div class="card">
+    <h2>📡 データ取得状況</h2>
+    <div class="health">
+      {% for h in health.hotels %}
+      <span class="chip {{ h.status }}">{{ h.hotel_name }}: {{ h.row_count }}件</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   <div class="card">
     <h2>⚠️ 本日の変動アラート（前日比 ±5%以上）</h2>
@@ -110,6 +137,7 @@ def generate_report(
     prev_prices: dict,
     changes: list[dict],
     run_date: str,
+    health=None,
 ) -> Path:
     DOCS_DIR.mkdir(exist_ok=True)
 
@@ -122,7 +150,7 @@ def generate_report(
     today = date.fromisoformat(run_date)
     rows = []
     current = today
-    while current <= today + timedelta(days=180):
+    while current <= today + timedelta(days=config.HORIZON_DAYS):
         ds = current.isoformat()
         wd = current.weekday()
         rows.append(
@@ -143,6 +171,7 @@ def generate_report(
         updated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         changes=changes,
         rows=rows,
+        health=health,
     )
     out = DOCS_DIR / "index.html"
     out.write_text(html, encoding="utf-8")

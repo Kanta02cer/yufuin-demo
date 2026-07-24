@@ -1,14 +1,11 @@
 import csv
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-ALERT_THRESHOLD = 0.05
+from core import config
 
-HOTEL_NAMES = {
-    "kai_yufuin": "界 由布院",
-    "kamenoi_bessho": "亀の井別荘",
-    "enowa_yufuin": "ENOWA YUFUIN",
-}
+DATA_DIR = config.DATA_DIR
+ALERT_THRESHOLD = config.ALERT_THRESHOLD
+HOTEL_NAMES = config.HOTEL_NAMES
 
 
 def load_prices(csv_path: Path) -> dict[str, dict[str, int]]:
@@ -46,12 +43,26 @@ def save_prices(prices_by_hotel: dict[str, dict], run_date: str) -> Path:
     return csv_path
 
 
+def _has_data(csv_path: Path) -> bool:
+    """CSVがヘッダのみ（データ0行）でないかを判定する。"""
+    prices = load_prices(csv_path)
+    return any(dates for dates in prices.values())
+
+
 def find_previous_csv(exclude_date: str) -> Path | None:
+    """比較対象となる直近の「データが入った」CSVを返す。
+
+    空(ヘッダのみ)のCSVはスキップする。全施設ゼロ件だった障害日を
+    「前日」として選んでしまい、変動検出が機能しなくなるのを防ぐ。
+    """
     csvs = sorted(
         [p for p in DATA_DIR.glob("prices_*.csv") if exclude_date not in p.name],
         reverse=True,
     )
-    return csvs[0] if csvs else None
+    for csv_path in csvs:
+        if _has_data(csv_path):
+            return csv_path
+    return None
 
 
 def detect_changes(
